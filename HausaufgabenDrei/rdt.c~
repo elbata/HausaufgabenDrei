@@ -65,28 +65,20 @@ void* threadAttention(void* param){
 					//posiciono los punteros dentro del  datagrama
 					struct iphdr *ipHeader = (struct iphdr *)datagram;
 					struct rdt_header *rdtHeader = (struct rdt_header*) (datagram + sizeof(struct iphdr));
-					
-					//cantidad de bytes a enviar
 					int cantToSend;
-					//numero de secuencia a enviar y esperado por ack
 					int seq_number;
-					
-					//pido el semaforo
 					pthread_mutex_lock(&semBuffer);
 					cantToSend= MAX_LARGO_BUFFER_RECEIVER - buffer->cantLibres;
-					
 					if (cantToSend>0){
 					  if (cantToSend > MAX_RDT_SIZE){
 					    cantToSend=MAX_RDT_SIZE;					    
 					  }
-					  //copio los bytes a enviar
 					  for(int i=0;i<cantToSend;i++){
 					    datagram[sizeof(struct iphdr) + sizeof(struct rdt_header) + i]= buffer->arreglo[buffer->begin];
 					    buffer->begin=(buffer->begin + 1) % MAX_LARGO_BUFFER_RECEIVER ;
 					    buffer->cantLibres++;
 					  }
 					}
-					//libero el semaforo
 					seq_number=buffer->expected_seq_number;
 					pthread_mutex_unlock(&semBuffer);
 					if(cantToSend>0){
