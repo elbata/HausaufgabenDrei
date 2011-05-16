@@ -52,6 +52,44 @@ int IP2asc(u_int32_t IP,char * result){
 	return aux;
 }
 
+int enviarACK (int numeroDeSecuencia){
+  //variable donde almaceno lo que voy a enviar, la seteo en 0
+  //el tamaño es headerIP + headerRDT
+  char datagrama_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
+  memset(datagrama_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
+
+  //posiciono los punteros dentro del  datagrama
+  struct iphdr *ipHeader = (struct iphdr *)datagrama_ack;  
+  struct rdt_header *rdtHeader = (struct rdt_header*) (datagrama_ack + sizeof(struct iphdr));
+
+  //creo el datagrama a enviar				
+  ipHeader->ihl = 5;
+  ipHeader->version = 4;
+  ipHeader->tos = 0;
+  ipHeader->tot_len = htons(sizeof(struct iphdr) + sizeof(struct rdt_header));	/* tamaño total del datagrama, headerIP + datos*/
+  ipHeader->frag_off = 0;		/* no fragment */
+  ipHeader->ttl = 64;			/* default value */
+  ipHeader->protocol = PROTOCOLO_RDT;	/* protocolo*/
+  ipHeader->check = 0;			/* not needed in iphdr */
+  ipHeader->saddr = myAddr.sin_addr.s_addr; /* direccion del source */
+  ipHeader->daddr = remote_addr.sin_addr.s_addr; /* direccion del destination */
+
+  //seteo el rdt_header
+  rdtHeader->srcPort=myAddr.sin_port;
+  rdtHeader->destPort=remote_addr.sin_port;
+  rdtHeader->flags_rdt= ACK_FLAG;
+  rdtHeader->nro_SEC_rdt=0;
+  rdtHeader->nro_ACK_rdt=numeroDeSecuencia;
+
+  //envio el ACK
+  int envio = -1;
+  while (envio <= 0){
+    envio = sendto(miSocket, (char *)datagrama_ack, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
+  }
+  return envio;
+  
+}
+
 void* threadAttention(void* param){
 	while (close == false){
 		switch (estado){
@@ -264,8 +302,10 @@ void* threadAttention(void* param){
 					      cantidadIntentosACK = 0;
 					    }
 					  }//fin while !receiveACK
+					  
+					  //incremento el numero de secuencia
 					  pthread_mutex_lock(&semBuffer);
-					  seq_number=buffer->expected_seq_number++;
+					  buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
 					  pthread_mutex_unlock(&semBuffer);
 					}//fin if cantToSend > 0
 			}
@@ -278,54 +318,150 @@ void* threadAttention(void* param){
 					break;
 			case SYN_RECIBIDO:
 					break;			
-			case ESTABLECIDO_PAS:
+			case ESTABLECIDO_PAS:{
+					char datagram[MAX_IP_SIZE];
+					memset(datagram, 0, MAX_IP_SIZE);
+					//posiciono los punteros dentro del  datagrama
+					struct iphdr *ipHeader = (struct iphdr *)datagram;
+					struct rdt_header *rdtHeader = (struct rdt_header*) (datagram + sizeof(struct iphdr));
+
+					struct sockaddr_in remote_addr2;
+					socklen_t *remote_addr_size2 = (socklen_t *) sizeof (remote_addr2);
+					int fromlen2 = sizeof(remote_addr2);
+
 					pthread_mutex_lock(&semBuffer);
-					for(int i=buffer->begin; i < buffer->end; i++){
-					  fprintf(stderr,"%c",buffer->arreglo[i]);
-					}	
-					fprintf(stderr,"\n");
+					int seq_number = buffer->expected_seq_number;
 					pthread_mutex_unlock(&semBuffer);
+					
+					//quedo trancado hasta que recibo algo de la red...
+					int tamRecibido = recvfrom(miSocket, (char*) &datagram, MAX_IP_SIZE, 0, (struct sockaddr*) &remote_addr2, (socklen_t *)&fromlen2);
+					
+					if (tamRecibido < 0){
+					  fprintf(stderr,"error al recibir un datagrama del cliente\n");
+					}
+					else{
+					   char charIP[20];
+					    //extraigo el headerIP
+					    struct iphdr *ipr = (struct iphdr *)datagram;
+
+					    //paso el IP del q manda a char para imprimirlo
+					    IP2asc(ntohl(ipr->saddr),&charIP[0]);
+					    printf("Recepcion origen IP address: %s \n", charIP);
+
+					    //idem al anterior, solo con el IP del destinatario
+					    IP2asc(ntohl(ipr->daddr),&charIP[0]);
+					    printf("Destino IP address: %s: \n", charIP);
+
+					    //imprimo el protocolo 
+					    printf("protocolo: %d: ", ipr->protocol);
+
+					    //extraigo el headerRDT
+					    struct rdt_header *rdt = (struct rdt_header *)(datagram + sizeof(struct iphdr));
+					    printf("srcPort %d\n", rdt->srcPort);		
+					    printf("destPort %d\n", rdt->destPort);
+					    printf("flags %d\n", rdt->flags_rdt);				
+					    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
+					    printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
+
+					    //verifico el protocolo
+					    bool protocoloCorrecto;
+					    if (ipr->protocol == PROTOCOLO_RDT)
+						    protocoloCorrecto = true;
+					    else
+						    protocoloCorrecto = false;
+
+					    //verifico que es DATA
+					    bool esDATA;
+					    //verifico que sea solo ack
+					    unsigned char banderas = rdt->flags_rdt;			
+					    if (banderas == DATA_FLAG)
+						    esDATA = true;
+					    else
+						    esDATA = false;
+					    
+					    //es mi IP
+					    bool miIP=false;
+					    if (myAddr.sin_addr.s_addr == ipr->daddr)
+						miIP = true;
+					    else
+						miIP = false;
+
+					    //es la IP del otro
+					    bool suIP=false;
+					    if (remote_addr.sin_addr.s_addr == ipr->saddr)
+						suIP = true;
+					    else
+						suIP = false;
+
+					    //es mi puerto
+					    bool miPuerto=false;
+					    if (myAddr.sin_port == rdt->destPort)
+						miPuerto= true;
+					    else
+						miPuerto = false;
+
+					    //es su puerto
+					    bool suPuerto=false;
+					    if (remote_addr.sin_port == rdt->srcPort)
+						suPuerto= true;
+					    else
+						suPuerto = false;
+					    
+					    //faltaria controlar el numero de secuencia		  
+					    if (protocoloCorrecto && esDATA && miIP && suIP && miPuerto && suPuerto){
+					      if (rdt->nro_SEC_rdt == seq_number){
+						fprintf(stderr,"recibi el datagrama con datos, con numero de secuencia esperado \n");
+						
+						//pido el semaforo
+						pthread_mutex_lock(&semBuffer);
+						
+						//controlo que tenga espacio en el buffer para los datos...
+						int sizeDatos = tamRecibido - (sizeof(struct rdt_header) + sizeof(struct iphdr));
+						if (buffer->cantLibres >= sizeDatos){
+						  
+						  int pos = sizeof(struct rdt_header) + sizeof(struct iphdr);
+						  //copio los datos al buffer...
+						  for (int i=0; i< sizeDatos; i++){
+						    buffer->arreglo[buffer->end] = datagram[pos + i];
+						    buffer->end = (buffer->end + 1) % MAX_LARGO_BUFFER_RECEIVER;
+						    buffer->cantLibres--;
+						    
+						  }
+						  
+						  int aux = enviarACK (seq_number);
+						  
+						  //incremento el numero de secuencia...						  
+						  buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
+						  pthread_mutex_unlock(&semBuffer);
+						}
+						else{
+						  fprintf(stderr,"no tengo espacio en el buffer para almacenar los datos recibidos\n");
+						  pthread_mutex_unlock(&semBuffer);
+						}
+					      }
+					      else{
+						fprintf(stderr,"recibi el datagrama con datos,con numero de secuencia distinto al esperado\n");
+						//envio con ack anterior al actual
+						int envio = enviarACK(seq_number-1);
+						
+					      }
+					    }
+					    else{//el paquete no es para mi
+						    fprintf(stderr,"el paquete no es para mi,espero data \n");
+					    }
+					  
+					}//fin else tamRecibido < 0
+					
+			}
 					break;
 			case ESPERANDO_FIN:
+					break;
+			case INICIO:
 					break;
 		}
 	}
 }
-			
-int enviarACK (int numeroDeSecuencia){
-  //variable donde almaceno lo que voy a enviar, la seteo en 0
-  //el tamaño es headerIP + headerRDT
-  char datagrama_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
-  memset(datagrama_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
 
-  //posiciono los punteros dentro del  datagrama
-  struct iphdr *ipHeader = (struct iphdr *)datagrama_ack;  
-  struct rdt_header *rdtHeader = (struct rdt_header*) (datagrama_ack + sizeof(struct iphdr));
-
-  //creo el datagrama a enviar				
-  ipHeader->ihl = 5;
-  ipHeader->version = 4;
-  ipHeader->tos = 0;
-  ipHeader->tot_len = htons(sizeof(struct iphdr) + sizeof(struct rdt_header));	/* tamaño total del datagrama, headerIP + datos*/
-  ipHeader->frag_off = 0;		/* no fragment */
-  ipHeader->ttl = 64;			/* default value */
-  ipHeader->protocol = PROTOCOLO_RDT;	/* protocolo*/
-  ipHeader->check = 0;			/* not needed in iphdr */
-  ipHeader->saddr = myAddr.sin_addr.s_addr; /* direccion del source */
-  ipHeader->daddr = remote_addr.sin_addr.s_addr; /* direccion del destination */
-
-  //seteo el rdt_header
-  rdtHeader->srcPort=myAddr.sin_port;
-  rdtHeader->destPort=remote_addr.sin_port;
-  rdtHeader->flags_rdt= ACK_FLAG;
-  rdtHeader->nro_SEC_rdt=0;
-  rdtHeader->nro_ACK_rdt=0;
-
-  //envio el syn
-  int envioS = sendto(miSocket, (char *)datagrama_ack, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
-  return envioS;
-  
-}
 
 int enviarSYN_ACK (int numeroDeSecuencia){
   //variable donde almaceno lo que voy a enviar, la seteo en 0

@@ -87,8 +87,8 @@ int main( int argc, const char* argv[] )
 	cantInt++;
     }
 
-    printf("Archivo enviado,ingrese un int para salir\n");
+    printf("Archivo enviado\n");
     int fin;
-    scanf("%d\n", &fin);
+    scanf("ingrese un int para salir %d\n", &fin);
     return 0;
 }
