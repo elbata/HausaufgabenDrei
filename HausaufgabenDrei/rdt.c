@@ -18,7 +18,7 @@
 #define ESPERANDO_FIN 8
 #define INICIO 9
 
-#define MAX_LARGO_BUFFER_RECEIVER 2048
+#define MAX_LARGO_BUFFER_RECEIVER 1024
 #define MAX_SEQ_NUMBER 256
 #define PROTOCOLO_RDT	0xFF
 #define MAX_INTENTOS 10
@@ -86,12 +86,93 @@ int enviarACK (int numeroDeSecuencia){
   while (envio <= 0){
     envio = sendto(miSocket, (char *)datagrama_ack, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
   }
+  fprintf(stderr,"envie ack.\n");
   return envio;
   
 }
 
+int enviarFIN (){
+  //variable donde almaceno lo que voy a enviar, la seteo en 0
+  //el tamaño es headerIP + headerRDT
+  char datagrama_fin [sizeof(struct iphdr) + sizeof(struct rdt_header)];
+  memset(datagrama_fin, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
+
+  //posiciono los punteros dentro del  datagrama
+  struct iphdr *ipHeader = (struct iphdr *)datagrama_fin;  
+  struct rdt_header *rdtHeader = (struct rdt_header*) (datagrama_fin + sizeof(struct iphdr));
+
+  //creo el datagrama a enviar				
+  ipHeader->ihl = 5;
+  ipHeader->version = 4;
+  ipHeader->tos = 0;
+  ipHeader->tot_len = htons(sizeof(struct iphdr) + sizeof(struct rdt_header));	/* tamaño total del datagrama, headerIP + datos*/
+  ipHeader->frag_off = 0;		/* no fragment */
+  ipHeader->ttl = 64;			/* default value */
+  ipHeader->protocol = PROTOCOLO_RDT;	/* protocolo*/
+  ipHeader->check = 0;			/* not needed in iphdr */
+  ipHeader->saddr = myAddr.sin_addr.s_addr; /* direccion del source */
+  ipHeader->daddr = remote_addr.sin_addr.s_addr; /* direccion del destination */
+
+  //seteo el rdt_header
+  rdtHeader->srcPort=myAddr.sin_port;
+  rdtHeader->destPort=remote_addr.sin_port;
+  rdtHeader->flags_rdt= FIN_FLAG;
+  rdtHeader->nro_SEC_rdt=0;
+  rdtHeader->nro_ACK_rdt=0;
+
+  //envio el FIN
+  int envio = -1;
+  while (envio <= 0){
+    envio = sendto(miSocket, (char *)datagrama_fin, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
+  }
+  fprintf(stderr,"envie fin.\n");
+  return envio;
+  
+}
+
+int enviarFIN_ACK(){
+  //variable donde almaceno lo que voy a enviar, la seteo en 0
+  //el tamaño es headerIP + headerRDT
+  char datagrama_fin_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
+  memset(datagrama_fin_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
+
+  //posiciono los punteros dentro del  datagrama
+  struct iphdr *ipHeader = (struct iphdr *)datagrama_fin_ack;
+  struct rdt_header *rdtHeader = (struct rdt_header*) (datagrama_fin_ack + sizeof(struct iphdr));
+
+  //creo el datagrama a enviar				
+  ipHeader->ihl = 5;
+  ipHeader->version = 4;
+  ipHeader->tos = 0;
+  ipHeader->tot_len = htons(sizeof(struct iphdr) + sizeof(struct rdt_header));	/* tamaño total del datagrama, headerIP + datos*/
+  ipHeader->frag_off = 0;		/* no fragment */
+  ipHeader->ttl = 64;			/* default value */
+  ipHeader->protocol = PROTOCOLO_RDT;	/* protocolo*/
+  ipHeader->check = 0;			/* not needed in iphdr */
+  ipHeader->saddr = myAddr.sin_addr.s_addr; /* direccion del source */
+  ipHeader->daddr = remote_addr.sin_addr.s_addr; /* direccion del destination */
+
+  //seteo el rdt_header
+  rdtHeader->srcPort=myAddr.sin_port;
+  rdtHeader->destPort=remote_addr.sin_port;
+  rdtHeader->flags_rdt= FIN_FLAG + ACK_FLAG;
+  rdtHeader->nro_SEC_rdt=0;
+  rdtHeader->nro_ACK_rdt=0;
+
+  //envio el FIN_ACK
+  int envio = -1;
+  while (envio <= 0){
+    envio = sendto(miSocket, (char *)datagrama_fin_ack, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
+  }
+  fprintf(stderr,"envie fin_ack.\n");
+  return envio;
+  
+}
+
+
 void* threadAttention(void* param){
 	while (close == false){
+	    fprintf(stderr,"estado: %d.\n",estado);
 		switch (estado){
 			case DESCONECTADO:
 					break;
@@ -153,23 +234,25 @@ void* threadAttention(void* param){
 					  }
 					  bool receiveACK=false;
 					  int cantidadIntentosACK = 0;
-					  while (!receiveACK){
-					    //set de filedescriptors
-					    fd_set fds;
-					    int n;
-					    //estructura para el timeout
-					    struct timeval tv;
+					  //set de filedescriptors
+					  fd_set fds;
+					  int n;
+					  //estructura para el timeout
+					  struct timeval tv;
 
-					    //setea el file descriptor del que voy a leer
-					    FD_ZERO(&fds);
-					    FD_SET(miSocket, &fds);
+					  //setea el file descriptor del que voy a leer
+					  FD_ZERO(&fds);
+					  FD_SET(miSocket, &fds);
 
-					    //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-					    tv.tv_sec = 1;
-					    tv.tv_usec = 0;
+					  //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+					  tv.tv_sec = 3;
+					  tv.tv_usec = 0;
 
-					    //la magia del select			
-					    n = select(miSocket + 1, &fds, NULL, NULL, &tv);
+					  //la magia del select			
+					  n = select(miSocket + 1, &fds, NULL, NULL, &tv);
+					  
+					  while (!receiveACK && (cantidadIntentosACK < MAX_INTENTOS)){
+
 					    //salgo por timeout
 					    if (n == 0){
 					      fprintf(stderr,"no llego el ACK,sali por timeout\n");
@@ -178,7 +261,9 @@ void* threadAttention(void* param){
 					      while(envioS<=0){
 						envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
 					      }
-					      cantidadIntentosACK = 0;
+					      cantidadIntentosACK++;
+					      tv.tv_sec = 3;
+					      tv.tv_usec = 0;
 					    }
 					    else{
 					      if (n < 0){
@@ -282,184 +367,726 @@ void* threadAttention(void* param){
 						    }
 						    else{//el paquete no es para mi
 							    fprintf(stderr,"no es el paquete que espero,espero ack \n");
-							    //aca no va un 0 hay q cambiarlo
-							    //enviarSYN_ACK(0);
-							    cantidadIntentosACK++;
+							    tv.tv_sec = 3;
+							    tv.tv_usec = 0;
+						    }
+
+						}//fin else hubo error en el receive
+					      }//fin else n<0
+					    }//fin else select == 0					   
+					  }//fin while !receiveACK
+					  
+					  //si lo envie 10 veces y nunca me llego el ack, puedo suponer qu no estoy conectado...
+					  if (!receiveACK){
+					    fprintf(stderr,"espero un ack que no llego en 10 intentos, posible desconexion \n");
+					    estado = DESCONECTADO;
+					  }else{
+					  
+					  //incremento el numero de secuencia
+					  pthread_mutex_lock(&semBuffer);
+					  buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
+					  pthread_mutex_unlock(&semBuffer);
+					  }
+					}//fin if cantToSend > 0
+			}
+					break;
+			case TERMINAR_ENVIAR:{
+					char datagram[MAX_IP_SIZE];
+					memset(datagram, 0, MAX_IP_SIZE);
+					//posiciono los punteros dentro del  datagrama
+					struct iphdr *ipHeader = (struct iphdr *)datagram;
+					struct rdt_header *rdtHeader = (struct rdt_header*) (datagram + sizeof(struct iphdr));
+					
+					//cantidad de bytes a enviar
+					int cantToSend;
+					//numero de secuencia a enviar y esperado por ack
+					int seq_number;
+					
+					//pido el semaforo
+					pthread_mutex_lock(&semBuffer);
+					cantToSend= MAX_LARGO_BUFFER_RECEIVER - buffer->cantLibres;
+					
+					if (cantToSend>0){
+					  if (cantToSend > MAX_RDT_SIZE){
+					    cantToSend=MAX_RDT_SIZE;					    
+					  }
+					  //copio los bytes a enviar
+					  for(int i=0;i<cantToSend;i++){
+					    datagram[sizeof(struct iphdr) + sizeof(struct rdt_header) + i]= buffer->arreglo[buffer->begin];
+					    buffer->begin=(buffer->begin + 1) % MAX_LARGO_BUFFER_RECEIVER ;
+					    buffer->cantLibres++;
+					  }
+					}
+					//libero el semaforo
+					seq_number=buffer->expected_seq_number;
+					pthread_mutex_unlock(&semBuffer);
+					if(cantToSend>0){
+					  //creo el datagrama a enviar				
+					  ipHeader->ihl = 5;
+					  ipHeader->version = 4;
+					  ipHeader->tos = 0;
+					  ipHeader->tot_len = htons(sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend);	/* tamaño total del datagrama, headerIP + datos*/
+					  ipHeader->frag_off = 0;		/* no fragment */
+					  ipHeader->ttl = 64;			/* default value */
+					  ipHeader->protocol = PROTOCOLO_RDT;	/* protocolo*/
+					  ipHeader->check = 0;			/* not needed in iphdr */
+					  ipHeader->saddr = myAddr.sin_addr.s_addr; /* direccion del source */
+					  ipHeader->daddr = remote_addr.sin_addr.s_addr; /* direccion del destination */
+
+					  //seteo el rdt_header
+					  rdtHeader->srcPort=myAddr.sin_port;
+					  rdtHeader->destPort=remote_addr.sin_port;
+					  rdtHeader->flags_rdt= DATA_FLAG;
+					  rdtHeader->nro_SEC_rdt=seq_number;
+					  rdtHeader->nro_ACK_rdt=0;
+					  
+					  int envioS = -1;
+					  while(envioS<=0){
+					    envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
+					  }
+					  bool receiveACK=false;
+					  int cantidadIntentos = 0;
+					  //set de filedescriptors
+					  fd_set fds;
+					  int n;
+					  //estructura para el timeout
+					  struct timeval tv;
+
+					  //setea el file descriptor del que voy a leer
+					  FD_ZERO(&fds);
+					  FD_SET(miSocket, &fds);
+
+					  //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+					  tv.tv_sec = 3;
+					  tv.tv_usec = 0;
+					  while (!receiveACK && (cantidadIntentos < MAX_INTENTOS)){
+					    //la magia del select			
+					    n = select(miSocket + 1, &fds, NULL, NULL, &tv);
+					    //salgo por timeout
+					    if (n == 0){
+					      fprintf(stderr,"no llego el ACK,sali por timeout\n");
+					      envioS = -1;
+					      //vuelvo a enviar el paquete
+					      while(envioS<=0){
+						envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
+					      }
+					      tv.tv_sec = 3;
+					      tv.tv_usec = 0;
+					      cantidadIntentos++;
+					    }
+					    else{
+					      if (n < 0){
+						fprintf(stderr,"error al recibir para ACK\n");
+					      }
+					      else{		  		  		  		  	  
+						//datagrama ACK a recibir
+						char datagrama_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
+						memset(datagrama_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
+						struct sockaddr_in remote_addr2;
+						socklen_t *remote_addr_size2 = (socklen_t *) sizeof (remote_addr2);
+						int fromlen2 = sizeof(remote_addr2);
+
+						//en teoria esto tendria que funcionar, puedo leer sin problemas porque el select me devuelve en que socket tengo actividad y hay uno solo asi que no habria problemas
+						int tamRecibidoAck = recvfrom(miSocket, (char*) &datagrama_ack, sizeof(struct iphdr) + sizeof(struct rdt_header), 0, (struct sockaddr*) &remote_addr2, (socklen_t *)&fromlen2);
+						
+						
+						if (tamRecibidoAck < 0){
+						    fprintf(stderr,"error al recibir ACK\n");
+
+						}
+						else{				
+
+						    char charIP[20];
+						    //extraigo el headerIP
+						    struct iphdr *ipr = (struct iphdr *)datagrama_ack;
+
+						    //paso el IP del q manda a char para imprimirlo
+						    IP2asc(ntohl(ipr->saddr),&charIP[0]);
+						    printf("Recepcion origen IP address: %s \n", charIP);
+
+						    //idem al anterior, solo con el IP del destinatario
+						    IP2asc(ntohl(ipr->daddr),&charIP[0]);
+						    printf("Destino IP address: %s: \n", charIP);
+
+						    //imprimo el protocolo 
+						    printf("protocolo: %d: ", ipr->protocol);
+
+						    //extraigo el headerRDT
+						    struct rdt_header *rdt = (struct rdt_header *)(datagrama_ack + sizeof(struct iphdr));
+						    printf("srcPort %d\n", rdt->srcPort);		
+						    printf("destPort %d\n", rdt->destPort);
+						    printf("flags %d\n", rdt->flags_rdt);				
+						    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
+						    printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
+
+						    //verifico el protocolo
+						    bool protocoloCorrecto;
+						    if (ipr->protocol == PROTOCOLO_RDT)
+							    protocoloCorrecto = true;
+						    else
+							    protocoloCorrecto = false;
+
+						    //verifico que es ACK
+						    bool esACK;
+						    //verifico que sea solo ack
+						    unsigned char banderas = rdt->flags_rdt;			
+						    if (banderas == ACK_FLAG)
+							    esACK = true;
+						    else
+							    esACK = false;
+						    
+						    //es mi IP
+						    bool miIP=false;
+						    if (myAddr.sin_addr.s_addr == ipr->daddr)
+							miIP = true;
+						    else
+							miIP = false;
+
+						    //es la IP del otro
+						    bool suIP=false;
+						    if (remote_addr.sin_addr.s_addr == ipr->saddr)
+							suIP = true;
+						    else
+							suIP = false;
+
+						    //es mi puerto
+						    bool miPuerto=false;
+						    if (myAddr.sin_port == rdt->destPort)
+							miPuerto= true;
+						    else
+							miPuerto = false;
+
+						    //es su puerto
+						    bool suPuerto=false;
+						    if (remote_addr.sin_port == rdt->srcPort)
+							suPuerto= true;
+						    else
+							suPuerto = false;
+						    
+						    //faltaria controlar el numero de secuencia		  
+						    if (protocoloCorrecto && esACK && miIP && suIP && miPuerto && suPuerto){
+						      if (rdt->nro_ACK_rdt == seq_number){
+							fprintf(stderr,"recibi el ACK con exito \n");
+							receiveACK = true;
+							cantidadIntentos = 0;
+						      }
+						      else{
+							fprintf(stderr,"recibi el ACK con numero de secuencia distinto\n");
+						      }
+						    }
+						    else{//el paquete no es para mi
+							    fprintf(stderr,"no es el paquete que espero,espero ack \n");
+							    tv.tv_sec = 3;
+							    tv.tv_usec = 0;							    
 						    }
 
 						}//fin else hubo error en el receive
 					      }//fin else n<0
 					    }//fin else select == 0
 					    
-					    //simulo el timeout por cantidad de mensajes que no son mios
-					    if (cantidadIntentosACK == MAX_INTENTOS){
-					      fprintf(stderr,"no llego el ACK,sali por timeout de cantidad intentos\n");
-					      envioS = -1;
-					      //vuelvo a enviar el paquete
-					      while(envioS<=0){
-						envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
-					      }
-					      cantidadIntentosACK = 0;
-					    }
 					  }//fin while !receiveACK
 					  
+					  //si no recibi el ACK en la cantidad de intentos necesaria
+					  if (!receiveACK){
+					    int aux = enviarFIN();
+					    estado = ESPERANDO_CLOSE;
+					    fprintf(stderr,"espero un ack que no llego en 10 intentos, posible desconexion \n");
+					  }
+					  else{
 					  //incremento el numero de secuencia
 					  pthread_mutex_lock(&semBuffer);
 					  buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
 					  pthread_mutex_unlock(&semBuffer);
+					  }
 					}//fin if cantToSend > 0
+					else{
+					  //terrmine de mandar todo, envio fin y cambio de estado...
+					  int aux = enviarFIN();
+					  estado = ESPERANDO_CLOSE;
+					}
 			}
 					break;
-			case TERMINAR_ENVIAR:
-					break;
-			case ESPERANDO_CLOSE:
+			case ESPERANDO_CLOSE:{
+			  
+					char datagrama_fin_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
+					memset(datagrama_fin_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
+
+					struct sockaddr_in remote_addr2;
+					socklen_t *remote_addr_size2 = (socklen_t *) sizeof (remote_addr2);
+					int fromlen2 = sizeof(remote_addr2);
+					
+					//booleano para saber si recibi el fin,ack
+					bool recibi_fin_ack = false;
+					int cantidadIntentosFIN_ACK = 0;
+					
+					//bool para salir por timeout,casi siempre voy a leer algo, asi q en caso de que no llegue nada salgo por timeout
+					bool timeout = false;
+					//set de filedescriptors
+					fd_set fds;
+					int n;
+					//estructura para el timeout
+					struct timeval tv;
+
+					//setea el file descriptor del que voy a leer
+					FD_ZERO(&fds);
+					FD_SET(miSocket, &fds);
+
+					//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+					tv.tv_sec = 3;
+					tv.tv_usec = 0;
+					
+					while (!recibi_fin_ack && !timeout){
+
+
+					  //la magia del select			
+					  n = select(miSocket + 1, &fds, NULL, NULL, &tv);
+					  //salgo por timeout	      
+					  if (n == 0){
+					    fprintf(stderr,"no llego el fin,ack para terminar la conexion,sali por timeout\n");
+					    timeout=true;
+					  }
+					  else{
+					    if (n < 0){
+					      fprintf(stderr,"error al recibir para fin,ack para terminar la conexion\n");
+					    }
+					    else{
+						int tamRecibidoFinAck = recvfrom(miSocket, (char*) &datagrama_fin_ack, sizeof(struct iphdr) + sizeof(struct rdt_header), 0, (struct sockaddr*) &remote_addr2, (socklen_t *)&fromlen2);
+						if (tamRecibidoFinAck < 0){
+						  fprintf(stderr,"error al recibir el fin,ack\n");
+						}
+						else{
+						    char charIP[20];
+						    //extraigo el headerIP
+						    struct iphdr *ipr = (struct iphdr *)datagrama_fin_ack;
+
+						    //paso el IP del q manda a char para imprimirlo
+						    IP2asc(ntohl(ipr->saddr),&charIP[0]);
+						    printf("Recepcion origen IP address: %s \n", charIP);
+
+						    //idem al anterior, solo con el IP del destinatario
+						    IP2asc(ntohl(ipr->daddr),&charIP[0]);
+						    printf("Destino IP address: %s: \n", charIP);
+
+						    //imprimo el protocolo 
+						    printf("protocolo: %d: ", ipr->protocol);
+
+						    //extraigo el headerRDT
+						    struct rdt_header *rdt = (struct rdt_header *)(datagrama_fin_ack + sizeof(struct iphdr));
+						    printf("srcPort %d\n", rdt->srcPort);		
+						    printf("destPort %d\n", rdt->destPort);
+						    printf("flags %d\n", rdt->flags_rdt);				
+						    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
+						    printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
+
+						    //verifico el protocolo
+						    bool protocoloCorrecto;
+						    if (ipr->protocol == PROTOCOLO_RDT)
+							    protocoloCorrecto = true;
+						    else
+							    protocoloCorrecto = false;
+
+						    //verifico que es FIN_ACK
+						    bool es_FIN_ACK;
+						    
+						    unsigned char banderas = rdt->flags_rdt;			
+						    if (banderas == (ACK_FLAG + FIN_FLAG))
+							    es_FIN_ACK = true;
+						    else
+							    es_FIN_ACK = false;
+						    
+						    //es mi IP
+						    bool miIP=false;
+						    if (myAddr.sin_addr.s_addr == ipr->daddr)
+							miIP = true;
+						    else
+							miIP = false;
+
+						    //es la IP del otro
+						    bool suIP=false;
+						    if (remote_addr.sin_addr.s_addr == ipr->saddr)
+							suIP = true;
+						    else
+							suIP = false;
+
+						    //es mi puerto
+						    bool miPuerto=false;
+						    if (myAddr.sin_port == rdt->destPort)
+							miPuerto= true;
+						    else
+							miPuerto = false;
+
+						    //es su puerto
+						    bool suPuerto=false;
+						    if (remote_addr.sin_port == rdt->srcPort)
+							suPuerto= true;
+						    else
+							suPuerto = false;
+						    
+						    //faltaria controlar el numero de secuencia
+						    
+						    if (protocoloCorrecto && es_FIN_ACK && miIP && suIP && miPuerto && suPuerto){	
+							    fprintf(stderr,"recibi el fin,ack con exito \n");
+							    recibi_fin_ack = true;
+						    }
+						    else{//el paquete no es para mi
+							    fprintf(stderr,"no es el paquete que espero \n");
+						    }//fin else comparar si es el mensaje que quiero
+						}//fin else tamRecibido <0
+					    }//fin else n<0
+					  }//fin else n ==0
+
+					}//fin while recibi_fin_ack
+					if (recibi_fin_ack){
+					  int aux = enviarACK(0);
+					}
+					close = true;
+			}
 					break;
 			case ESTABLECIMIENTO_PASIVO:
 					break;
 			case SYN_RECIBIDO:
 					break;			
 			case ESTABLECIDO_PAS:{
-					char datagram[MAX_IP_SIZE];
-					memset(datagram, 0, MAX_IP_SIZE);
-					//posiciono los punteros dentro del  datagrama
-					struct iphdr *ipHeader = (struct iphdr *)datagram;
-					struct rdt_header *rdtHeader = (struct rdt_header*) (datagram + sizeof(struct iphdr));
+			  
+					bool esFIN =false;
+					bool timeout = false;
+					//set de filedescriptors
+					fd_set fds;
+					int n;
+					//estructura para el timeout
+					struct timeval tv;
+
+					//setea el file descriptor del que voy a leer
+					FD_ZERO(&fds);
+					FD_SET(miSocket, &fds);
+
+					//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+					tv.tv_sec = 5;
+					tv.tv_usec = 5000000;
+					while(!timeout && !esFIN){
+			  
+					  //la magia del select			
+					  n = select(miSocket + 1, &fds, NULL, NULL, &tv);
+					  if (n == 0){
+					    fprintf(stderr,"sali por timeout en establecido_pas\n");
+					    timeout = true;
+					  }else{
+					    
+					      char datagram[MAX_IP_SIZE];
+					      memset(datagram, 0, MAX_IP_SIZE);
+					      //posiciono los punteros dentro del  datagrama
+					      struct iphdr *ipHeader = (struct iphdr *)datagram;
+					      struct rdt_header *rdtHeader = (struct rdt_header*) (datagram + sizeof(struct iphdr));
+
+					      struct sockaddr_in remote_addr2;
+					      socklen_t *remote_addr_size2 = (socklen_t *) sizeof (remote_addr2);
+					      int fromlen2 = sizeof(remote_addr2);
+
+					      pthread_mutex_lock(&semBuffer);
+					      int seq_number = buffer->expected_seq_number;
+					      pthread_mutex_unlock(&semBuffer);
+					      
+					      //quedo trancado hasta que recibo algo de la red...
+					      int tamRecibido = recvfrom(miSocket, (char*) &datagram, MAX_IP_SIZE, 0, (struct sockaddr*) &remote_addr2, (socklen_t *)&fromlen2);
+					      
+					      if (tamRecibido < 0){
+						fprintf(stderr,"error al recibir un datagrama del cliente\n");
+					      }
+					      else{
+						char charIP[20];
+						  //extraigo el headerIP
+						  struct iphdr *ipr = (struct iphdr *)datagram;
+
+						  //paso el IP del q manda a char para imprimirlo
+						  IP2asc(ntohl(ipr->saddr),&charIP[0]);
+					      //   printf("Recepcion origen IP address: %s \n", charIP);
+
+						  //idem al anterior, solo con el IP del destinatario
+						  IP2asc(ntohl(ipr->daddr),&charIP[0]);
+						// printf("Destino IP address: %s: \n", charIP);
+
+						  //imprimo el protocolo 
+						  //printf("protocolo: %d: ", ipr->protocol);
+
+						  //extraigo el headerRDT
+						  struct rdt_header *rdt = (struct rdt_header *)(datagram + sizeof(struct iphdr));
+						  //printf("srcPort %d\n", rdt->srcPort);		
+						  //printf("destPort %d\n", rdt->destPort);
+						  //printf("flags %d\n", rdt->flags_rdt);				
+						  //printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
+						  //printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
+
+						  //verifico el protocolo
+						  bool protocoloCorrecto;
+						  if (ipr->protocol == PROTOCOLO_RDT)
+							  protocoloCorrecto = true;
+						  else
+							  protocoloCorrecto = false;
+
+						  //verifico que es DATA
+						  bool esDATA;
+						  //verifico que sea solo ack
+						  unsigned char banderas = rdt->flags_rdt;			
+						  if (banderas == DATA_FLAG)
+							  esDATA = true;
+						  else
+							  esDATA = false;
+						  
+						  if (banderas == FIN_FLAG)
+							  esFIN = true;
+						  else
+							  esFIN = false;
+						  
+						  //es mi IP
+						  bool miIP=false;
+						  if (myAddr.sin_addr.s_addr == ipr->daddr)
+						      miIP = true;
+						  else
+						      miIP = false;
+
+						  //es la IP del otro
+						  bool suIP=false;
+						  if (remote_addr.sin_addr.s_addr == ipr->saddr)
+						      suIP = true;
+						  else
+						      suIP = false;
+
+						  //es mi puerto
+						  bool miPuerto=false;
+						  if (myAddr.sin_port == rdt->destPort)
+						      miPuerto= true;
+						  else
+						      miPuerto = false;
+
+						  //es su puerto
+						  bool suPuerto=false;
+						  if (remote_addr.sin_port == rdt->srcPort)
+						      suPuerto= true;
+						  else
+						      suPuerto = false;
+						  
+						  //faltaria controlar el numero de secuencia		  
+						  if (protocoloCorrecto && esDATA && miIP && suIP && miPuerto && suPuerto){
+						    if (rdt->nro_SEC_rdt == seq_number){
+						      fprintf(stderr,"recibi el datagrama con datos, con numero de secuencia esperado \n");
+						      
+						      //pido el semaforo
+						      pthread_mutex_lock(&semBuffer);
+						      
+						      //controlo que tenga espacio en el buffer para los datos...
+						      int sizeDatos = tamRecibido - (sizeof(struct rdt_header) + sizeof(struct iphdr));
+						      if (buffer->cantLibres >= sizeDatos){
+							
+							int pos = sizeof(struct rdt_header) + sizeof(struct iphdr);
+							//copio los datos al buffer...
+							for (int i=0; i< sizeDatos; i++){
+							  buffer->arreglo[buffer->end] = datagram[pos + i];
+							  buffer->end = (buffer->end + 1) % MAX_LARGO_BUFFER_RECEIVER;
+							  buffer->cantLibres--;
+							  
+							}
+							
+							int aux = enviarACK (seq_number);
+							
+							//incremento el numero de secuencia...						  
+							buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
+							pthread_mutex_unlock(&semBuffer);
+							//reseteo
+							tv.tv_sec = 5;
+							tv.tv_usec = 5000000;
+						      }
+						      else{
+							fprintf(stderr,"no tengo espacio en el buffer para almacenar los datos recibidos\n");
+							pthread_mutex_unlock(&semBuffer);
+							//reseteo
+							tv.tv_sec = 5;
+							tv.tv_usec = 5000000;
+						      }
+						    }
+						    else{
+						      fprintf(stderr,"recibi el datagrama con datos,con numero de secuencia distinto al esperado\n");
+						      //envio con ack anterior al actual
+						      int envio = enviarACK(seq_number-1);
+						      //reseteo
+						      tv.tv_sec = 5;
+						      tv.tv_usec = 5000000;
+						      
+						    }
+						  }
+						  else{
+							  if (protocoloCorrecto && esFIN && miIP && suIP && miPuerto && suPuerto){
+							    //envio FIN,ACK y cambio de estado...
+							    fprintf(stderr,"recibi fin\n");
+							    esFIN = true;
+							    //int aux = enviarFIN_ACK();
+							    //estado = ESPERANDO_FIN;
+							  }
+							  else{
+							    //el paquete no es para mi
+							    fprintf(stderr,"el paquete no es para mi,espero data \n");
+							  }
+						  }
+					    }//fin else tamRecibido < 0
+					  }//fin else n==0
+					}//fin while
+					if (esFIN){
+					  int aux = enviarFIN_ACK();
+					}
+					  estado = ESPERANDO_FIN;					
+			}
+					break;
+			case ESPERANDO_FIN:{
+				        char datagrama_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
+					memset(datagrama_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
 
 					struct sockaddr_in remote_addr2;
 					socklen_t *remote_addr_size2 = (socklen_t *) sizeof (remote_addr2);
 					int fromlen2 = sizeof(remote_addr2);
-
-					pthread_mutex_lock(&semBuffer);
-					int seq_number = buffer->expected_seq_number;
-					pthread_mutex_unlock(&semBuffer);
 					
-					//quedo trancado hasta que recibo algo de la red...
-					int tamRecibido = recvfrom(miSocket, (char*) &datagram, MAX_IP_SIZE, 0, (struct sockaddr*) &remote_addr2, (socklen_t *)&fromlen2);
+					//booleano para saber si recibi el fin,ack
+					bool recibi_ack = false;
 					
-					if (tamRecibido < 0){
-					  fprintf(stderr,"error al recibir un datagrama del cliente\n");
-					}
-					else{
-					   char charIP[20];
-					    //extraigo el headerIP
-					    struct iphdr *ipr = (struct iphdr *)datagram;
+					//bool para salir por timeout,casi siempre voy a leer algo, asi q en caso de que no llegue nada salgo por timeout
+					bool timeout = false;
+					//set de filedescriptors
+					fd_set fds;
+					int n;
+					//estructura para el timeout
+					struct timeval tv;
 
-					    //paso el IP del q manda a char para imprimirlo
-					    IP2asc(ntohl(ipr->saddr),&charIP[0]);
-					    printf("Recepcion origen IP address: %s \n", charIP);
+					//setea el file descriptor del que voy a leer
+					FD_ZERO(&fds);
+					FD_SET(miSocket, &fds);
 
-					    //idem al anterior, solo con el IP del destinatario
-					    IP2asc(ntohl(ipr->daddr),&charIP[0]);
-					    printf("Destino IP address: %s: \n", charIP);
-
-					    //imprimo el protocolo 
-					    printf("protocolo: %d: ", ipr->protocol);
-
-					    //extraigo el headerRDT
-					    struct rdt_header *rdt = (struct rdt_header *)(datagram + sizeof(struct iphdr));
-					    printf("srcPort %d\n", rdt->srcPort);		
-					    printf("destPort %d\n", rdt->destPort);
-					    printf("flags %d\n", rdt->flags_rdt);				
-					    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
-					    printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
-
-					    //verifico el protocolo
-					    bool protocoloCorrecto;
-					    if (ipr->protocol == PROTOCOLO_RDT)
-						    protocoloCorrecto = true;
-					    else
-						    protocoloCorrecto = false;
-
-					    //verifico que es DATA
-					    bool esDATA;
-					    //verifico que sea solo ack
-					    unsigned char banderas = rdt->flags_rdt;			
-					    if (banderas == DATA_FLAG)
-						    esDATA = true;
-					    else
-						    esDATA = false;
-					    
-					    //es mi IP
-					    bool miIP=false;
-					    if (myAddr.sin_addr.s_addr == ipr->daddr)
-						miIP = true;
-					    else
-						miIP = false;
-
-					    //es la IP del otro
-					    bool suIP=false;
-					    if (remote_addr.sin_addr.s_addr == ipr->saddr)
-						suIP = true;
-					    else
-						suIP = false;
-
-					    //es mi puerto
-					    bool miPuerto=false;
-					    if (myAddr.sin_port == rdt->destPort)
-						miPuerto= true;
-					    else
-						miPuerto = false;
-
-					    //es su puerto
-					    bool suPuerto=false;
-					    if (remote_addr.sin_port == rdt->srcPort)
-						suPuerto= true;
-					    else
-						suPuerto = false;
-					    
-					    //faltaria controlar el numero de secuencia		  
-					    if (protocoloCorrecto && esDATA && miIP && suIP && miPuerto && suPuerto){
-					      if (rdt->nro_SEC_rdt == seq_number){
-						fprintf(stderr,"recibi el datagrama con datos, con numero de secuencia esperado \n");
-						
-						//pido el semaforo
-						pthread_mutex_lock(&semBuffer);
-						
-						//controlo que tenga espacio en el buffer para los datos...
-						int sizeDatos = tamRecibido - (sizeof(struct rdt_header) + sizeof(struct iphdr));
-						if (buffer->cantLibres >= sizeDatos){
-						  
-						  int pos = sizeof(struct rdt_header) + sizeof(struct iphdr);
-						  //copio los datos al buffer...
-						  for (int i=0; i< sizeDatos; i++){
-						    buffer->arreglo[buffer->end] = datagram[pos + i];
-						    buffer->end = (buffer->end + 1) % MAX_LARGO_BUFFER_RECEIVER;
-						    buffer->cantLibres--;
-						    
-						  }
-						  
-						  int aux = enviarACK (seq_number);
-						  
-						  //incremento el numero de secuencia...						  
-						  buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
-						  pthread_mutex_unlock(&semBuffer);
+					//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+					tv.tv_sec = 3;
+					tv.tv_usec = 0;
+					while (!recibi_ack && !timeout){
+					  //la magia del select			
+					  n = select(miSocket + 1, &fds, NULL, NULL, &tv);
+					  //salgo por timeout	      
+					  if (n == 0){
+					    fprintf(stderr,"no llego el ack para terminar la conexion,sali por timeout\n");
+					    timeout=true;
+					  }
+					  else{
+					    if (n < 0){
+					      fprintf(stderr,"error al recibir ack para terminar la conexion\n");
+					    }
+					    else{
+						int tamRecibidoAck = recvfrom(miSocket, (char*) &datagrama_ack, sizeof(struct iphdr) + sizeof(struct rdt_header), 0, (struct sockaddr*) &remote_addr2, (socklen_t *)&fromlen2);
+						if (tamRecibidoAck < 0){
+						  fprintf(stderr,"error al recibir el fin,ack\n");
 						}
 						else{
-						  fprintf(stderr,"no tengo espacio en el buffer para almacenar los datos recibidos\n");
-						  pthread_mutex_unlock(&semBuffer);
-						}
-					      }
-					      else{
-						fprintf(stderr,"recibi el datagrama con datos,con numero de secuencia distinto al esperado\n");
-						//envio con ack anterior al actual
-						int envio = enviarACK(seq_number-1);
-						
-					      }
-					    }
-					    else{//el paquete no es para mi
-						    fprintf(stderr,"el paquete no es para mi,espero data \n");
-					    }
-					  
-					}//fin else tamRecibido < 0
+						    char charIP[20];
+						    //extraigo el headerIP
+						    struct iphdr *ipr = (struct iphdr *)datagrama_ack;
+
+						    //paso el IP del q manda a char para imprimirlo
+						    IP2asc(ntohl(ipr->saddr),&charIP[0]);
+						    printf("Recepcion origen IP address: %s \n", charIP);
+
+						    //idem al anterior, solo con el IP del destinatario
+						    IP2asc(ntohl(ipr->daddr),&charIP[0]);
+						    printf("Destino IP address: %s: \n", charIP);
+
+						    //imprimo el protocolo 
+						    printf("protocolo: %d: ", ipr->protocol);
+
+						    //extraigo el headerRDT
+						    struct rdt_header *rdt = (struct rdt_header *)(datagrama_ack + sizeof(struct iphdr));
+						    printf("srcPort %d\n", rdt->srcPort);		
+						    printf("destPort %d\n", rdt->destPort);
+						    printf("flags %d\n", rdt->flags_rdt);				
+						    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
+						    printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
+
+						    //verifico el protocolo
+						    bool protocoloCorrecto;
+						    if (ipr->protocol == PROTOCOLO_RDT)
+							    protocoloCorrecto = true;
+						    else
+							    protocoloCorrecto = false;
+
+						    //verifico que es ACK
+						    bool es_ACK;
+						    
+						    unsigned char banderas = rdt->flags_rdt;			
+						    if (banderas == (ACK_FLAG))
+							    es_ACK = true;
+						    else
+							    es_ACK = false;
+						    
+						    //es mi IP
+						    bool miIP=false;
+						    if (myAddr.sin_addr.s_addr == ipr->daddr)
+							miIP = true;
+						    else
+							miIP = false;
+
+						    //es la IP del otro
+						    bool suIP=false;
+						    if (remote_addr.sin_addr.s_addr == ipr->saddr)
+							suIP = true;
+						    else
+							suIP = false;
+
+						    //es mi puerto
+						    bool miPuerto=false;
+						    if (myAddr.sin_port == rdt->destPort)
+							miPuerto= true;
+						    else
+							miPuerto = false;
+
+						    //es su puerto
+						    bool suPuerto=false;
+						    if (remote_addr.sin_port == rdt->srcPort)
+							suPuerto= true;
+						    else
+							suPuerto = false;
+						    
+						    //faltaria controlar el numero de secuencia
+						    
+						    if (protocoloCorrecto && es_ACK && miIP && suIP && miPuerto && suPuerto){	
+							    fprintf(stderr,"recibi el ack con exito, cierro la conexion\n");
+							    recibi_ack = true;
+						    }
+						    else{//el paquete no es para mi
+							    fprintf(stderr,"no es el paquete que espero \n");
+						    }//fin else comparar si es el mensaje que quiero
+						}//fin else tamRecibido <0
+					    }//fin else n<0
+					  }//fin else n ==0
+
+					}//fin while recibi_fin_ack
 					
+					//tengo que esperar que terminen de leer para finalizar...
+					bool termine = false;
+					int faltan;
+					while (!termine){					  
+					  pthread_mutex_lock(&semBuffer);	
+					  faltan = buffer->cantLibres;					
+					  pthread_mutex_unlock(&semBuffer);						  
+					  if (faltan == MAX_LARGO_BUFFER_RECEIVER)
+					    termine = true;
+					  else
+					    termine = false;
+					}
+					close = true;
 			}
-					break;
-			case ESPERANDO_FIN:
 					break;
 			case INICIO:
 					break;
 		}
 	}
+
+	estado = INICIO;
+	//este pedido de semaforo no tendria que ser necesario...
+	pthread_mutex_lock(&semBuffer);	
+	delete buffer;					
+	pthread_mutex_unlock(&semBuffer);	  
+	pthread_exit(NULL);
 }
 
 
@@ -696,21 +1323,20 @@ int aceptarRDT(unsigned char localRDTport){
 		fprintf(stderr,"envie el syn,ack \n");
 		//si no recibo nada en x segundos
 		bool timeout = false;
-		
-		while (!reciboACK1 && cantidadIntentosACK1 < MAX_INTENTOS && !timeout){
-		  //set de filedescriptors
-		  fd_set fds;
-		  int n;
-		  //estructura para el timeout
-		  struct timeval tv;
+		//set de filedescriptors
+		fd_set fds;
+		int n;
+		//estructura para el timeout
+		struct timeval tv;
 
-		  //setea el file descriptor del que voy a leer
-		  FD_ZERO(&fds);
-		  FD_SET(miSocket, &fds);
+		//setea el file descriptor del que voy a leer
+		FD_ZERO(&fds);
+		FD_SET(miSocket, &fds);
 
-		  //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-		  tv.tv_sec = 1;
-		  tv.tv_usec = 0;
+		//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+		tv.tv_sec = 3;
+		tv.tv_usec = 0;		
+		while (!reciboACK1 && !timeout){
 
 		  //la magia del select			
 		  n = select(miSocket + 1, &fds, NULL, NULL, &tv);
@@ -820,9 +1446,6 @@ int aceptarRDT(unsigned char localRDTport){
 			  }
 			  else{//el paquete no es para mi
 				  fprintf(stderr,"no es el paquete que espero,espero ack \n");
-				  //aca no va un 0 hay q cambiarlo
-				  //enviarSYN_ACK(0);
-				  cantidadIntentosACK1++;
 			  }
 
 		      }//fin else hubo error en el receive
@@ -868,7 +1491,7 @@ int conectarRDT(unsigned char localRDTport,unsigned char peerRDTPport, struct in
     }
     else{
       //datagrama syn,ack a recibir
-	fprintf(stderr,"envie syn\n");
+      fprintf(stderr,"envie syn\n");
       char datagrama_syn_ack [sizeof(struct iphdr) + sizeof(struct rdt_header)];
       memset(datagrama_syn_ack, 0, sizeof(struct iphdr) + sizeof(struct rdt_header));
 
@@ -882,21 +1505,22 @@ int conectarRDT(unsigned char localRDTport,unsigned char peerRDTPport, struct in
       
       //bool para salir por timeout,casi siempre voy a leer algo, asi q en caso de que no llegue nada salgo por timeout
       bool timeout = false;
-      while (!recibi_syn_ack && cantidadIntentosSYN_ACK < MAX_INTENTOS && !timeout){
-	//set de filedescriptors
-	fd_set fds;
-	int n;
-	//estructura para el timeout
-	struct timeval tv;
+      //set de filedescriptors
+      fd_set fds;
+      int n;
+      //estructura para el timeout
+      struct timeval tv;
 
-	//setea el file descriptor del que voy a leer
-	FD_ZERO(&fds);
-	FD_SET(miSocket, &fds);
+      //setea el file descriptor del que voy a leer
+      FD_ZERO(&fds);
+      FD_SET(miSocket, &fds);
 
-	//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
+      //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
+      tv.tv_sec = 3;
+      tv.tv_usec = 0;
 
+      
+      while (!recibi_syn_ack  && !timeout){
 	//la magia del select			
 	n = select(miSocket + 1, &fds, NULL, NULL, &tv);
 	//salgo por timeout	      
@@ -994,9 +1618,6 @@ int conectarRDT(unsigned char localRDTport,unsigned char peerRDTPport, struct in
 		  }
 		  else{//el paquete no es para mi
 			  fprintf(stderr,"no es el paquete que espero \n");
-			  //aca no va un 0 hay q cambiarlo
-			  //enviarSYN_ACK(0);
-			  cantidadIntentosSYN_ACK++;
 		  }//fin else comparar si es el mensaje que quiero
 	      }//fin else tamRecibido <0
 	  }//fin else n<0
@@ -1067,7 +1688,7 @@ int escribirRDT(const void *buf, size_t len){
 
 
 int leerRDT(void *buf, size_t len){
-  if (estado == ESTABLECIDO_PAS){
+  if ((estado == ESTABLECIDO_PAS) || (estado == ESPERANDO_FIN)){
     pthread_mutex_lock(&semBuffer);
     if (buffer->cantLibres == MAX_LARGO_BUFFER_RECEIVER){
       pthread_mutex_unlock(&semBuffer);
@@ -1090,7 +1711,7 @@ int leerRDT(void *buf, size_t len){
     }
   }
   else{
-    fprintf(stderr,"intento de escribir, pero no se encuentra en estado ESTABLECIDO_ACT\n");
+    fprintf(stderr,"intento de leer, pero no se encuentra en estado ESTABLECIDO_PAS\n");
     return -1;
   }
 }

@@ -108,7 +108,7 @@ int main( int argc, const char* argv[] )
 	cantInt++;
     }
     printf("Archivo enviado\n");
-    sleep(10);
+    sleep(2);
     // cierro conexion
     cerrarRDT();
     printf("Cerrando sesion RDT\n");
