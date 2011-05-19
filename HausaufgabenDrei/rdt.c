@@ -18,7 +18,7 @@
 #define ESPERANDO_FIN 8
 #define INICIO 9
 
-#define MAX_LARGO_BUFFER_RECEIVER 1024
+#define MAX_LARGO_BUFFER_RECEIVER 2048
 #define MAX_SEQ_NUMBER 256
 #define PROTOCOLO_RDT	0xFF
 #define MAX_INTENTOS 10
@@ -83,7 +83,7 @@ int enviarACK (int numeroDeSecuencia){
 
   //envio el ACK
   int envio = -1;
-  while (envio <= 0){
+  while (envio < 0){
     envio = sendto(miSocket, (char *)datagrama_ack, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
   }
   fprintf(stderr,"envie ack.\n");
@@ -161,7 +161,7 @@ int enviarFIN_ACK(){
 
   //envio el FIN_ACK
   int envio = -1;
-  while (envio <= 0){
+  while (envio < 0){
     envio = sendto(miSocket, (char *)datagrama_fin_ack, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
   }
   fprintf(stderr,"envie fin_ack.\n");
@@ -172,7 +172,7 @@ int enviarFIN_ACK(){
 
 void* threadAttention(void* param){
 	while (close == false){
-	    fprintf(stderr,"estado: %d.\n",estado);
+	  //  fprintf(stderr,"estado: %d.\n",estado);
 		switch (estado){
 			case DESCONECTADO:
 					break;
@@ -189,11 +189,12 @@ void* threadAttention(void* param){
 					int cantToSend;
 					//numero de secuencia a enviar y esperado por ack
 					int seq_number;
+					int seq_numerRecibido;
 					
 					//pido el semaforo
 					pthread_mutex_lock(&semBuffer);
 					cantToSend= MAX_LARGO_BUFFER_RECEIVER - buffer->cantLibres;
-					
+					//fprintf(stderr,"\ncantToSend = %d\n",cantToSend);
 					if (cantToSend>0){
 					  if (cantToSend > MAX_RDT_SIZE){
 					    cantToSend=MAX_RDT_SIZE;					    
@@ -229,9 +230,10 @@ void* threadAttention(void* param){
 					  rdtHeader->nro_ACK_rdt=0;
 					  
 					  int envioS = -1;
-					  while(envioS<=0){
+					  while(envioS<0){
 					    envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
 					  }
+					  fprintf(stderr,"envie el paquetecon seq= %d\n",seq_number);
 					  bool receiveACK=false;
 					  int cantidadIntentosACK = 0;
 					  //set de filedescriptors
@@ -245,29 +247,32 @@ void* threadAttention(void* param){
 					  FD_SET(miSocket, &fds);
 
 					  //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-					  tv.tv_sec = 3;
+					  tv.tv_sec = 1;
 					  tv.tv_usec = 0;
 
-					  //la magia del select			
-					  n = select(miSocket + 1, &fds, NULL, NULL, &tv);
-					  
-					  while (!receiveACK && (cantidadIntentosACK < MAX_INTENTOS)){
 
+					  while (!receiveACK && (cantidadIntentosACK < MAX_INTENTOS)){
+					  //while (!receiveACK){
+					    //la magia del select	
+					    					  FD_ZERO(&fds);
+					  FD_SET(miSocket, &fds);
+					    n = select(miSocket + 1, &fds, NULL, NULL, &tv);
 					    //salgo por timeout
 					    if (n == 0){
 					      fprintf(stderr,"no llego el ACK,sali por timeout\n");
 					      envioS = -1;
 					      //vuelvo a enviar el paquete
-					      while(envioS<=0){
+					      while(envioS<0){
 						envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
 					      }
+					      fprintf(stderr,"volvi a enviar el paquete\n");
 					      cantidadIntentosACK++;
-					      tv.tv_sec = 3;
+					      tv.tv_sec = 1;
 					      tv.tv_usec = 0;
 					    }
 					    else{
 					      if (n < 0){
-						fprintf(stderr,"error al recibir para ACK\n");
+						fprintf(stderr,"error al recibir ACK\n");
 					      }
 					      else{		  		  		  		  	  
 						//datagrama ACK a recibir
@@ -307,9 +312,10 @@ void* threadAttention(void* param){
 						    printf("srcPort %d\n", rdt->srcPort);		
 						    printf("destPort %d\n", rdt->destPort);
 						    printf("flags %d\n", rdt->flags_rdt);				
-						    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
+						    printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);
+						    printf("espero nro_SEC_ %d\n", seq_number);		
 						    printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
-
+						    seq_numerRecibido =rdt->nro_ACK_rdt;
 						    //verifico el protocolo
 						    bool protocoloCorrecto;
 						    if (ipr->protocol == PROTOCOLO_RDT)
@@ -356,19 +362,19 @@ void* threadAttention(void* param){
 						    
 						    //faltaria controlar el numero de secuencia		  
 						    if (protocoloCorrecto && esACK && miIP && suIP && miPuerto && suPuerto){
-						      if (rdt->nro_ACK_rdt == seq_number){
+						      if (seq_numerRecibido == seq_number){
 							fprintf(stderr,"recibi el ACK con exito \n");
 							receiveACK = true;
 							cantidadIntentosACK = 0;
 						      }
 						      else{
-							fprintf(stderr,"recibi el ACK con numero de secuencia distinto\n");
+							fprintf(stderr,"recibi el ACK con numero de secuencia distinto %d\n",seq_numerRecibido);
 						      }
 						    }
 						    else{//el paquete no es para mi
-							    fprintf(stderr,"no es el paquete que espero,espero ack \n");
-							    tv.tv_sec = 3;
-							    tv.tv_usec = 0;
+							    fprintf(stderr,"el paquete no es para mi \n");
+							    //tv.tv_sec = 3;
+							    //tv.tv_usec = 0;
 						    }
 
 						}//fin else hubo error en el receive
@@ -380,12 +386,14 @@ void* threadAttention(void* param){
 					  if (!receiveACK){
 					    fprintf(stderr,"espero un ack que no llego en 10 intentos, posible desconexion \n");
 					    estado = DESCONECTADO;
-					  }else{
-					  
-					  //incremento el numero de secuencia
-					  pthread_mutex_lock(&semBuffer);
-					  buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
-					  pthread_mutex_unlock(&semBuffer);
+					  }
+					  else{
+					   
+					    //incremento el numero de secuencia
+						pthread_mutex_lock(&semBuffer);
+						buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
+						pthread_mutex_unlock(&semBuffer);
+					    
 					  }
 					}//fin if cantToSend > 0
 			}
@@ -457,7 +465,7 @@ void* threadAttention(void* param){
 					  FD_SET(miSocket, &fds);
 
 					  //setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-					  tv.tv_sec = 3;
+					  tv.tv_sec = 1;
 					  tv.tv_usec = 0;
 					  while (!receiveACK && (cantidadIntentos < MAX_INTENTOS)){
 					    //la magia del select			
@@ -470,7 +478,7 @@ void* threadAttention(void* param){
 					      while(envioS<=0){
 						envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
 					      }
-					      tv.tv_sec = 3;
+					      tv.tv_sec = 1;
 					      tv.tv_usec = 0;
 					      cantidadIntentos++;
 					    }
@@ -576,8 +584,8 @@ void* threadAttention(void* param){
 						    }
 						    else{//el paquete no es para mi
 							    fprintf(stderr,"no es el paquete que espero,espero ack \n");
-							    tv.tv_sec = 3;
-							    tv.tv_usec = 0;							    
+							    //tv.tv_sec = 3;
+							    //tv.tv_usec = 0;							    
 						    }
 
 						}//fin else hubo error en el receive
@@ -762,7 +770,7 @@ void* threadAttention(void* param){
 
 					//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
 					tv.tv_sec = 5;
-					tv.tv_usec = 5000000;
+					tv.tv_usec = 0;
 					while(!timeout && !esFIN){
 			  
 					  //la magia del select			
@@ -799,22 +807,23 @@ void* threadAttention(void* param){
 
 						  //paso el IP del q manda a char para imprimirlo
 						  IP2asc(ntohl(ipr->saddr),&charIP[0]);
-					      //   printf("Recepcion origen IP address: %s \n", charIP);
+					         printf("Recepcion origen IP address: %s \n", charIP);
 
 						  //idem al anterior, solo con el IP del destinatario
 						  IP2asc(ntohl(ipr->daddr),&charIP[0]);
-						// printf("Destino IP address: %s: \n", charIP);
+						 printf("Destino IP address: %s: \n", charIP);
 
 						  //imprimo el protocolo 
-						  //printf("protocolo: %d: ", ipr->protocol);
+						  printf("protocolo: %d: ", ipr->protocol);
 
 						  //extraigo el headerRDT
 						  struct rdt_header *rdt = (struct rdt_header *)(datagram + sizeof(struct iphdr));
-						  //printf("srcPort %d\n", rdt->srcPort);		
-						  //printf("destPort %d\n", rdt->destPort);
-						  //printf("flags %d\n", rdt->flags_rdt);				
-						  //printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);		
-						  //printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
+						  printf("srcPort %d\n", rdt->srcPort);		
+						  printf("destPort %d\n", rdt->destPort);
+						  printf("flags %d\n", rdt->flags_rdt);				
+						  printf("nro_SEC_rdt %d\n", rdt->nro_SEC_rdt);
+						  printf("espero nro_SEC_ %d\n", seq_number);		
+						  printf("nro_ACK_rdt %d\n", rdt->nro_ACK_rdt);		
 
 						  //verifico el protocolo
 						  bool protocoloCorrecto;
@@ -893,23 +902,23 @@ void* threadAttention(void* param){
 							pthread_mutex_unlock(&semBuffer);
 							//reseteo
 							tv.tv_sec = 5;
-							tv.tv_usec = 5000000;
+							tv.tv_usec = 0;
 						      }
 						      else{
 							fprintf(stderr,"no tengo espacio en el buffer para almacenar los datos recibidos\n");
 							pthread_mutex_unlock(&semBuffer);
 							//reseteo
 							tv.tv_sec = 5;
-							tv.tv_usec = 5000000;
+							tv.tv_usec = 0;
 						      }
 						    }
 						    else{
 						      fprintf(stderr,"recibi el datagrama con datos,con numero de secuencia distinto al esperado\n");
 						      //envio con ack anterior al actual
-						      int envio = enviarACK(seq_number-1);
+						      int envio = enviarACK((seq_number-1)%MAX_SEQ_NUMBER);
 						      //reseteo
 						      tv.tv_sec = 5;
-						      tv.tv_usec = 5000000;
+						      tv.tv_usec = 0;
 						      
 						    }
 						  }
@@ -924,6 +933,8 @@ void* threadAttention(void* param){
 							  else{
 							    //el paquete no es para mi
 							    fprintf(stderr,"el paquete no es para mi,espero data \n");
+							    tv.tv_sec = 5;
+							    tv.tv_usec = 0;
 							  }
 						  }
 					    }//fin else tamRecibido < 0
@@ -931,8 +942,11 @@ void* threadAttention(void* param){
 					}//fin while
 					if (esFIN){
 					  int aux = enviarFIN_ACK();
+					  
 					}
-					  estado = ESPERANDO_FIN;					
+					fprintf(stderr,"cambieeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \n");
+					estado = ESPERANDO_FIN;
+					  					
 			}
 					break;
 			case ESPERANDO_FIN:{
@@ -1059,7 +1073,7 @@ void* threadAttention(void* param){
 					    }//fin else n<0
 					  }//fin else n ==0
 
-					}//fin while recibi_fin_ack
+					}//fin while recibi_ack
 					
 					//tengo que esperar que terminen de leer para finalizar...
 					bool termine = false;
@@ -1661,6 +1675,7 @@ int escribirRDT(const void *buf, size_t len){
 	if (estado==ESTABLECIDO_ACT){
 		pthread_mutex_lock(&semBuffer);
 		int minLen = 0;
+		fprintf(stderr,"cant%d.\n",buffer->cantLibres);
 		if (buffer->cantLibres>0){
 		  if ( buffer->cantLibres > len)
 		    minLen = len;
@@ -1673,6 +1688,7 @@ int escribirRDT(const void *buf, size_t len){
 		    buffer->end = ((buffer->end + 1) % MAX_LARGO_BUFFER_RECEIVER);
 		    buffer->cantLibres--;
 		  }		  
+		  
 		}else{
 		  fprintf(stderr,"el buffer se encuentra lleno, no se puede escribir informacion.\n");
 		  pthread_mutex_unlock(&semBuffer);
@@ -1681,6 +1697,7 @@ int escribirRDT(const void *buf, size_t len){
 		pthread_mutex_unlock(&semBuffer);
 		return minLen;
 	}else{
+	  fprintf(stderr,"estado,%d\n",estado);
 		fprintf(stderr,"intento de escribir, pero no se encuentra en estado ESTABLECIDO_ACT\n");
 		return -1;
 	}
