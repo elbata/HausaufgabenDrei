@@ -75,11 +75,6 @@ int main( int argc, const char* argv[] )
     }
     fclose(archivocliente);
 
-    int aux;
-        printf("ingrese algo \n");
-
-    scanf("%d",&aux);
-    
     // comienzo proceso de envio
     int enviado  = 0;
     int buffSize = 0;
@@ -93,7 +88,7 @@ int main( int argc, const char* argv[] )
 	result = escribirRDT(&buf[enviado], buffSize);
         if ( result == -1 ){
             printf("Error al enviar datos\n");
-            sleep(1);
+            sleep(3);
 	    result = 0;
         } 
 	if(result >= 0){
@@ -104,15 +99,16 @@ int main( int argc, const char* argv[] )
 	/*if ( cantInt > 50 ){ 
         	enviado = lSize;
 	}*/
- sleep(1);
+ 	sleep(5);
 	cantInt++;
     }
     printf("Archivo enviado\n");
-    sleep(10);
+
+ printf("ENVIEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE %d\n",enviado);
     // cierro conexion
     cerrarRDT();
     printf("Cerrando sesion RDT\n");
-    sleep(5);
+    sleep(50);
     printf("Envio Finalizado\n");
     
 }

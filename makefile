@@ -13,3 +13,8 @@ send: send.c
 
 receive: receive.c
 	g++ -o receive receive.c
+
+clean:
+	rm *.o
+	rm recibeFile
+	rm enviaFile

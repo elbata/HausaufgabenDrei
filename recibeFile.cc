@@ -47,7 +47,7 @@ int main( int argc, const char* argv[] )
         exit(-1);
     }
     printf( "Equipo conectado\n");
-//    sleep(10);
+    sleep(10);
 
 
     // Espero llegada de datos
@@ -57,9 +57,9 @@ int main( int argc, const char* argv[] )
     result = 0;
     while (result >= 0) {
         result = leerRDT(&buf[0], MAX_READ_SIZE);
-	  	
+
 	if (result > 0 ) {
-printf("Recibidos %d bytes\n",result);
+	printf("Recibidos %d bytes\n",result);
 	    FILE* archigroso = fopen(argv[3], "a+");
 	    fwrite (buf , 1 , result, archigroso);
 	    fclose(archigroso);
@@ -71,10 +71,10 @@ printf("Recibidos %d bytes\n",result);
     sleep(10);
 
     // cierro conexion
-    //cerrarRDT();
+    cerrarRDT();
     printf("Cerrando sesion RDT\n");
     sleep(5);
-    printf("Recepcion Finalizada\n");
+    printf("Recepcion Finalizada,%d\n",leido);
 
     
 }

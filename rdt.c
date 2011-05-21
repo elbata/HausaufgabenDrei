@@ -21,7 +21,7 @@
 #define MAX_LARGO_BUFFER_RECEIVER 2048
 #define MAX_SEQ_NUMBER 256
 #define PROTOCOLO_RDT	0xFF
-#define MAX_INTENTOS 10
+#define MAX_INTENTOS 15
 
 
 struct buffer_struct {
@@ -125,7 +125,7 @@ int enviarFIN (){
   while (envio <= 0){
     envio = sendto(miSocket, (char *)datagrama_fin, sizeof(struct iphdr) + sizeof(struct rdt_header) , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
   }
-  fprintf(stderr,"envie fin.\n");
+  //fprintf(stderr,"envie fin.\n");
   return envio;
   
 }
@@ -254,8 +254,6 @@ void* threadAttention(void* param){
 					  while (!receiveACK && (cantidadIntentosACK < MAX_INTENTOS)){
 					  //while (!receiveACK){
 					    //la magia del select	
-					    					  FD_ZERO(&fds);
-					  FD_SET(miSocket, &fds);
 					    n = select(miSocket + 1, &fds, NULL, NULL, &tv);
 					    //salgo por timeout
 					    if (n == 0){
@@ -267,6 +265,9 @@ void* threadAttention(void* param){
 					      }
 					      fprintf(stderr,"volvi a enviar el paquete\n");
 					      cantidadIntentosACK++;
+					  	FD_CLR(miSocket,&fds);
+						FD_ZERO(&fds);
+					  	FD_SET(miSocket, &fds);
 					      tv.tv_sec = 1;
 					      tv.tv_usec = 0;
 					    }
@@ -472,19 +473,23 @@ void* threadAttention(void* param){
 					    n = select(miSocket + 1, &fds, NULL, NULL, &tv);
 					    //salgo por timeout
 					    if (n == 0){
-					      fprintf(stderr,"no llego el ACK,sali por timeout\n");
+					      fprintf(stderr,"no llego el ACK,sali por timeout en terminar\n");
 					      envioS = -1;
 					      //vuelvo a enviar el paquete
 					      while(envioS<=0){
 						envioS = sendto(miSocket, (char *)datagram, sizeof(struct iphdr) + sizeof(struct rdt_header) + cantToSend , 0,(struct sockaddr *)&remote_addr, (socklen_t)sizeof(remote_addr));
 					      }
+						fprintf(stderr,"vuelvo a enviar el paquete en terminar con num=%d\n",seq_number);
+					  	FD_CLR(miSocket,&fds);
+						FD_ZERO(&fds);
+					  	FD_SET(miSocket, &fds);
 					      tv.tv_sec = 1;
 					      tv.tv_usec = 0;
 					      cantidadIntentos++;
 					    }
 					    else{
 					      if (n < 0){
-						fprintf(stderr,"error al recibir para ACK\n");
+						fprintf(stderr,"error al recibir ACK en terminar\n");
 					      }
 					      else{		  		  		  		  	  
 						//datagrama ACK a recibir
@@ -499,7 +504,7 @@ void* threadAttention(void* param){
 						
 						
 						if (tamRecibidoAck < 0){
-						    fprintf(stderr,"error al recibir ACK\n");
+						    fprintf(stderr,"error al recibir ACK en terminar\n");
 
 						}
 						else{				
@@ -574,16 +579,16 @@ void* threadAttention(void* param){
 						    //faltaria controlar el numero de secuencia		  
 						    if (protocoloCorrecto && esACK && miIP && suIP && miPuerto && suPuerto){
 						      if (rdt->nro_ACK_rdt == seq_number){
-							fprintf(stderr,"recibi el ACK con exito \n");
+							fprintf(stderr,"recibi el ACK con exito en terminar\n");
 							receiveACK = true;
 							cantidadIntentos = 0;
 						      }
 						      else{
-							fprintf(stderr,"recibi el ACK con numero de secuencia distinto\n");
+							fprintf(stderr,"recibi el ACK con numero de secuencia distinto en terminar\n");
 						      }
 						    }
 						    else{//el paquete no es para mi
-							    fprintf(stderr,"no es el paquete que espero,espero ack \n");
+							    fprintf(stderr,"no es el paquete que espero,espero ack en terminar \n");
 							    //tv.tv_sec = 3;
 							    //tv.tv_usec = 0;							    
 						    }
@@ -598,7 +603,7 @@ void* threadAttention(void* param){
 					  if (!receiveACK){
 					    int aux = enviarFIN();
 					    estado = ESPERANDO_CLOSE;
-					    fprintf(stderr,"espero un ack que no llego en 10 intentos, posible desconexion \n");
+					    fprintf(stderr,"espero un ack que no llego en 10 intentos, posible desconexion en terminar\n");
 					  }
 					  else{
 					  //incremento el numero de secuencia
@@ -610,6 +615,7 @@ void* threadAttention(void* param){
 					else{
 					  //terrmine de mandar todo, envio fin y cambio de estado...
 					  int aux = enviarFIN();
+fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					  estado = ESPERANDO_CLOSE;
 					}
 			}
@@ -769,7 +775,7 @@ void* threadAttention(void* param){
 					FD_SET(miSocket, &fds);
 
 					//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-					tv.tv_sec = 5;
+					tv.tv_sec = 10;
 					tv.tv_usec = 0;
 					while(!timeout && !esFIN){
 			  
@@ -901,14 +907,17 @@ void* threadAttention(void* param){
 							buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
 							pthread_mutex_unlock(&semBuffer);
 							//reseteo
-							tv.tv_sec = 5;
+							tv.tv_sec = 10;
 							tv.tv_usec = 0;
 						      }
 						      else{
 							fprintf(stderr,"no tengo espacio en el buffer para almacenar los datos recibidos\n");
 							pthread_mutex_unlock(&semBuffer);
 							//reseteo
-							tv.tv_sec = 5;
+					  	FD_CLR(miSocket,&fds);
+						FD_ZERO(&fds);
+					  	FD_SET(miSocket, &fds);
+							tv.tv_sec = 10;
 							tv.tv_usec = 0;
 						      }
 						    }
@@ -917,7 +926,10 @@ void* threadAttention(void* param){
 						      //envio con ack anterior al actual
 						      int envio = enviarACK((seq_number-1)%MAX_SEQ_NUMBER);
 						      //reseteo
-						      tv.tv_sec = 5;
+					  	FD_CLR(miSocket,&fds);
+						FD_ZERO(&fds);
+					  	FD_SET(miSocket, &fds);
+						      tv.tv_sec = 10;
 						      tv.tv_usec = 0;
 						      
 						    }
@@ -933,7 +945,10 @@ void* threadAttention(void* param){
 							  else{
 							    //el paquete no es para mi
 							    fprintf(stderr,"el paquete no es para mi,espero data \n");
-							    tv.tv_sec = 5;
+					  	FD_CLR(miSocket,&fds);
+						FD_ZERO(&fds);
+					  	FD_SET(miSocket, &fds);
+							    tv.tv_sec = 10;
 							    tv.tv_usec = 0;
 							  }
 						  }
@@ -1692,7 +1707,7 @@ int escribirRDT(const void *buf, size_t len){
 		}else{
 		  fprintf(stderr,"el buffer se encuentra lleno, no se puede escribir informacion.\n");
 		  pthread_mutex_unlock(&semBuffer);
-		  return -1;
+		  return 0;
 		}
 		pthread_mutex_unlock(&semBuffer);
 		return minLen;
@@ -1736,6 +1751,7 @@ int leerRDT(void *buf, size_t len){
 int cerrarRDT(){
   if (estado==ESTABLECIDO_ACT){
     estado=TERMINAR_ENVIAR;
+	fprintf(stderr,"LLAMARON A CERRAR, CAMBIO A ESTADO TERMINAR ENVIAR\n");
     return 0;
   }else{
     fprintf(stderr,"intento de cerrar, pero no se encuentra en estado ESTABLECIDO_ACT\n");
