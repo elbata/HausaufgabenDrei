@@ -75,6 +75,48 @@ int main( int argc, const char* argv[] )
     printf("Cerrando sesion RDT\n");
     sleep(5);
     printf("Recepcion Finalizada,%d\n",leido);
+ IdRDT = crearRDT(direccion);
+    if ( IdRDT  == -1 ){
+        printf( "Error al crear el Socket\n");
+        exit(-1);
+    }
+    printf( "Esperando Conexion\n");
+
+    result = aceptarRDT(puertoO);
+    if ( result == -1 ) {
+        printf( "Error al aceptar conexion\n");
+        exit(-1);
+    }
+    printf( "Equipo conectado\n");
+    sleep(10);
+
+
+    // Espero llegada de datos
+    // voy grabando lo recibido
+    cantInt = 0;
+     leido = 0;
+    result = 0;
+char segundo[12] = "segundo.jpg";
+    while (result >= 0) {
+        result = leerRDT(&buf[0], MAX_READ_SIZE);
+
+	if (result > 0 ) {
+	printf("Recibidos %d bytes\n",result);
+	    FILE* archigroso = fopen(segundo, "a+");
+	    fwrite (buf , 1 , result, archigroso);
+	    fclose(archigroso);
+   	}
+	if (result > 0 ) {
+        	leido = leido + result;
+	}
+    }
+    sleep(10);
+
+    // cierro conexion
+    cerrarRDT();
+    printf("Cerrando sesion RDT\n");
+    sleep(5);
+    printf("Recepcion Finalizada,%d\n",leido);
 
     
 }

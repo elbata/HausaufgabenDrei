@@ -6,9 +6,9 @@
 # Defino variables del script
 INTERFACE="lo"
 DELAY="100ms 10ms" 	# la variable DELAY debe contener pegada la unidad ms
-LOSS="60%" 		# la variable LOSS debe contener pegado %
+LOSS="80%" 		# la variable LOSS debe contener pegado %
 REORDER="25% 50%"	# la variable REORDER debe contener pegado %
-DUPLICATE="4%"		# la variable DUPLICATE debe contener pegado %
+DUPLICATE="80%"		# la variable DUPLICATE debe contener pegado %
 
 down_proc(){
 

@@ -42,6 +42,7 @@ struct sockaddr_in myAddr;
 buffer_t* buffer;
 
 pthread_mutex_t semBuffer=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t semCerrar=PTHREAD_MUTEX_INITIALIZER;
 
 //estructura donde se guarda la direccion del que me envia
 struct sockaddr_in remote_addr;
@@ -753,6 +754,10 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					if (recibi_fin_ack){
 					  int aux = enviarACK(0);
 					}
+					fprintf(stderr,"no es el paquete que espero \n");
+					
+					pthread_mutex_unlock(&semCerrar);
+					fprintf(stderr,"libero semafor cerrar\n");
 					close = true;
 			}
 					break;
@@ -907,6 +912,9 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 							buffer->expected_seq_number = (buffer->expected_seq_number + 1) % MAX_SEQ_NUMBER;
 							pthread_mutex_unlock(&semBuffer);
 							//reseteo
+							FD_CLR(miSocket,&fds);
+							FD_ZERO(&fds);
+							FD_SET(miSocket, &fds);
 							tv.tv_sec = 10;
 							tv.tv_usec = 0;
 						      }
@@ -1752,6 +1760,9 @@ int cerrarRDT(){
   if (estado==ESTABLECIDO_ACT){
     estado=TERMINAR_ENVIAR;
 	fprintf(stderr,"LLAMARON A CERRAR, CAMBIO A ESTADO TERMINAR ENVIAR\n");
+	fprintf(stderr,"pido semaforo\n");
+	pthread_mutex_lock(&semCerrar);
+	fprintf(stderr,"liberaron el semaforo\n");
     return 0;
   }else{
     fprintf(stderr,"intento de cerrar, pero no se encuentra en estado ESTABLECIDO_ACT\n");
