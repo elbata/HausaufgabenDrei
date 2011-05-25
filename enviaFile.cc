@@ -91,7 +91,7 @@ int main( int argc, const char* argv[] )
 	result = escribirRDT(&buf[enviado], buffSize);
         if ( result == -1 ){
             printf("Error al enviar datos\n");
-            //sleep(3);
+            sleep(3);
 	    result = 0;
         } 
 	if(result >= 0){
@@ -102,7 +102,7 @@ int main( int argc, const char* argv[] )
 	/*if ( cantInt > 50 ){ 
         	enviado = lSize;
 	}*/
- 	//sleep(5);
+ 	sleep(5);
 	cantInt++;
     }
     printf("Archivo enviado\n");
