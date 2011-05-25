@@ -1762,6 +1762,7 @@ int cerrarRDT(){
 	fprintf(stderr,"LLAMARON A CERRAR, CAMBIO A ESTADO TERMINAR ENVIAR\n");
 	fprintf(stderr,"pido semaforo\n");
 	pthread_mutex_lock(&semCerrar);
+pthread_mutex_lock(&semCerrar);
 	fprintf(stderr,"liberaron el semaforo\n");
     return 0;
   }else{
