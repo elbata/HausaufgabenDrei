@@ -780,7 +780,7 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					FD_SET(miSocket, &fds);
 
 					//setea el struct timeval para el timeout, habiamos quedado que en 1 segundo estaba bien
-					tv.tv_sec = 10;
+					tv.tv_sec = 15;
 					tv.tv_usec = 0;
 					while(!timeout && !esFIN){
 			  
@@ -915,7 +915,7 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 							FD_CLR(miSocket,&fds);
 							FD_ZERO(&fds);
 							FD_SET(miSocket, &fds);
-							tv.tv_sec = 10;
+							tv.tv_sec = 15;
 							tv.tv_usec = 0;
 						      }
 						      else{
@@ -925,7 +925,7 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					  	FD_CLR(miSocket,&fds);
 						FD_ZERO(&fds);
 					  	FD_SET(miSocket, &fds);
-							tv.tv_sec = 10;
+							tv.tv_sec = 15;
 							tv.tv_usec = 0;
 						      }
 						    }
@@ -937,7 +937,7 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					  	FD_CLR(miSocket,&fds);
 						FD_ZERO(&fds);
 					  	FD_SET(miSocket, &fds);
-						      tv.tv_sec = 10;
+						      tv.tv_sec = 15;
 						      tv.tv_usec = 0;
 						      
 						    }
@@ -956,7 +956,7 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					  	FD_CLR(miSocket,&fds);
 						FD_ZERO(&fds);
 					  	FD_SET(miSocket, &fds);
-							    tv.tv_sec = 10;
+							    tv.tv_sec = 15;
 							    tv.tv_usec = 0;
 							  }
 						  }
@@ -985,7 +985,7 @@ fprintf(stderr,"envie el fin, termine de enviar el archivo\n");
 					
 					//bool para salir por timeout,casi siempre voy a leer algo, asi q en caso de que no llegue nada salgo por timeout
 					bool timeout = false;
-					//set de filedescriptors
+					//set de filedescriptorss
 					fd_set fds;
 					int n;
 					//estructura para el timeout
@@ -1762,7 +1762,8 @@ int cerrarRDT(){
 	fprintf(stderr,"LLAMARON A CERRAR, CAMBIO A ESTADO TERMINAR ENVIAR\n");
 	fprintf(stderr,"pido semaforo\n");
 	pthread_mutex_lock(&semCerrar);
-pthread_mutex_lock(&semCerrar);
+	pthread_mutex_lock(&semCerrar);
+	pthread_mutex_unlock(&semCerrar);
 	fprintf(stderr,"liberaron el semaforo\n");
     return 0;
   }else{
