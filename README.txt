@@ -1,5 +1,5 @@
 Insumos Obligatorio 3
-
+probando probando el git en windows
 - rdt.h archivo con cabezales de funciones y variables de uso general
 
 - Codigos fuentes send.c y receive.c con un ejemplo de como realizar el 
